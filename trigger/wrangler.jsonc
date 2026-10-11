@@ -4,6 +4,7 @@
   "main": "index.js",
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
+  "preview_urls": false,
   "triggers": { "crons": ["*/10 * * * *"] },
   "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "onepiece-snapshot" }],
   "observability": { "enabled": true }

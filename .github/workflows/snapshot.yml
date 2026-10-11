@@ -18,4 +18,4 @@ jobs:
         env:
           CARDTRADER_TOKEN: ${{ secrets.CARDTRADER_TOKEN }}
           UPLOAD_KEY: ${{ secrets.UPLOAD_KEY }}
-          WORKER_URL: https://onepiece-snapshot-trigger.miniworld7373.workers.dev
+          WORKER_URL: https://onepiece-snapshot-trigger.miniworld7373-daf.workers.dev
