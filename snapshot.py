@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""One snapshot of 100 % of One Piece listings on CardTrader -> op-<YYYYMMDD-HHMM>Z.csv.gz
+"""Snapshot 100 % of One Piece listings on CardTrader; store only what changed, in R2.
 
-Read-only.  Every One Piece expansion, every language, condition and seller: filter at
-analysis time, never at collection time.  One row per listing.  If an expansion still
-fails after retries the file is named ``...-partial.csv.gz``: never read disappearances
-from a partial snapshot.
+Read-only on CardTrader.  Every One Piece expansion, every language, condition and seller:
+filter at analysis time, never at collection time.  One row per listing.
 
-    CARDTRADER_TOKEN=... python snapshot.py
+R2 (through the Worker, see trigger/index.js):
+  state/full.csv.gz              previous snapshot, the diff reference (overwritten)
+  diffs/<YYYYMMDD>/<HHMM>.csv.gz  event (new / chg / gone) + listing row, UTC
+  base/<YYYYMMDD>.csv.gz          first full snapshot of each UTC day (recompute anchor)
+A snapshot where an expansion failed is dropped whole: a missing expansion would read
+as thousands of sales.
+
+    CARDTRADER_TOKEN=... WORKER_URL=... UPLOAD_KEY=... python snapshot.py
 """
 import csv
 import gzip
+import io
 import os
 import sys
 import time
@@ -52,6 +58,48 @@ def row(l, exp):
             u.get("country_code", ""), b(u.get("can_sell_via_hub")), b(u.get("one_day_ready")), u.get("user_type", "")]
 
 
+W = requests.Session()
+W.headers["X-Key"] = os.environ.get("UPLOAD_KEY", "")
+WORKER = os.environ.get("WORKER_URL", "").rstrip("/")
+
+
+def gz(header, rows):
+    buf = io.BytesIO()
+    with gzip.open(buf, "wt", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        w.writerows(rows)
+    return buf.getvalue()
+
+
+def put(key, data):
+    r = W.put(f"{WORKER}/put", params={"key": key}, data=data, timeout=300)
+    r.raise_for_status()
+
+
+def fetch_state():
+    r = W.get(f"{WORKER}/get", params={"key": "state/full.csv.gz"}, timeout=300)
+    if r.status_code == 404:
+        return None
+    r.raise_for_status()
+    with gzip.open(io.BytesIO(r.content), "rt", newline="") as f:
+        return {row[0]: row for row in list(csv.reader(f))[1:]}
+
+
+def diff(prev, rows):
+    """``[event] + row`` for listings new, changed, or gone since ``prev``."""
+    out, now = [], set()
+    for r in rows:
+        now.add(r[0])
+        old = prev.get(r[0])
+        if old is None:
+            out.append(["new"] + r)
+        elif old != r:
+            out.append(["chg"] + r)
+    out += [["gone"] + r for k, r in prev.items() if k not in now]
+    return out
+
+
 def main():
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     t0 = time.time()
@@ -65,17 +113,22 @@ def main():
             failed += 1
             continue
         for listings in body.values():
-            rows += [row(l, e["code"]) for l in listings]
+            rows += [["" if v is None else str(v) for v in row(l, e["code"])] for l in listings]
         time.sleep(0.2)
-    path = f"op-{stamp}Z{'-partial' if failed else ''}.csv.gz"
-    with gzip.open(path, "wt", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(FIELDS)
-        w.writerows(rows)
-    print(f"{path}: {len(rows)} listings, {len(exps)} expansions, {failed} failed, {time.time() - t0:.0f}s, "
-          f"{os.path.getsize(path) / 1e6:.1f} MB", flush=True)
-    with open(os.environ.get("GITHUB_OUTPUT", os.devnull), "a") as f:
-        f.write(f"file={path}\n")
+    if failed:
+        sys.exit(f"{stamp}: {failed} expansion(s) failed, snapshot dropped")
+    day, hm = stamp.split("-")
+    prev = fetch_state()
+    state = gz(FIELDS, rows)
+    msg = "first snapshot"
+    if prev is not None:
+        d = diff(prev, rows)
+        put(f"diffs/{day}/{hm}.csv.gz", gz(["event"] + FIELDS, d))
+        msg = f"{len(d)} changes"
+    if prev is None or hm < "0010":
+        put(f"base/{day}.csv.gz", state)
+    put("state/full.csv.gz", state)
+    print(f"{stamp}: {len(rows)} listings, {len(exps)} expansions, {msg}, {time.time() - t0:.0f}s", flush=True)
 
 
 if __name__ == "__main__":
