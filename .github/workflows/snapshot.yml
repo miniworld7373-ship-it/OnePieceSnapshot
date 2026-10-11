@@ -1,0 +1,36 @@
+name: snapshot
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+concurrency: snapshot
+permissions:
+  contents: write
+  actions: write
+env:
+  GH_TOKEN: ${{ github.token }}
+  MAX: 200
+jobs:
+  snap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stop after MAX snapshots
+        id: count
+        run: |
+          gh release view snapshots >/dev/null 2>&1 || gh release create snapshots --title snapshots --notes "One Piece CardTrader listings, one file per snapshot"
+          n=$(gh release view snapshots --json assets --jq '.assets | length')
+          echo "n=$n" >> "$GITHUB_OUTPUT"
+          if [ "$n" -ge "$MAX" ]; then gh workflow disable snapshot.yml; fi
+      - if: steps.count.outputs.n < 200
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - if: steps.count.outputs.n < 200
+        id: snap
+        run: pip install -q requests && python snapshot.py
+        env:
+          CARDTRADER_TOKEN: ${{ secrets.CARDTRADER_TOKEN }}
+      - if: steps.count.outputs.n < 200
+        run: gh release upload snapshots "${{ steps.snap.outputs.file }}"
