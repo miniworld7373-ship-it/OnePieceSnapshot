@@ -1,0 +1,8 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "onepiece-snapshot-trigger",
+  "main": "index.js",
+  "compatibility_date": "2026-10-01",
+  "triggers": { "crons": ["13,43 * * * *"] },
+  "observability": { "enabled": true }
+}

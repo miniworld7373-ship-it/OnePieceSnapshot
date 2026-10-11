@@ -1,7 +1,5 @@
 name: snapshot
 on:
-  schedule:
-    - cron: "13,43 * * * *"  # hors :00/:30, heures de pointe de GitHub
   workflow_dispatch:
 concurrency: snapshot
 permissions:

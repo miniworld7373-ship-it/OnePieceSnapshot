@@ -1,1 +1,3 @@
 *.csv.gz
+node_modules/
+.wrangler/
