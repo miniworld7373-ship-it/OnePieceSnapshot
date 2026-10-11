@@ -25,6 +25,7 @@ import requests
 
 API = "https://api.cardtrader.com/api/v2"
 ONE_PIECE = 15
+ALERT_BYTES = 8e9
 FIELDS = ["listing_id", "blueprint_id", "number", "name", "expansion", "rarity", "price_cents", "currency",
           "quantity", "condition", "language", "signed", "altered", "graded", "on_vacation", "seller_id",
           "seller", "country", "zero", "one_day_ready", "user_type"]
@@ -128,7 +129,12 @@ def main():
     if prev is None or hm < "0010":
         put(f"base/{day}.csv.gz", state)
     put("state/full.csv.gz", state)
-    print(f"{stamp}: {len(rows)} listings, {len(exps)} expansions, {msg}, {time.time() - t0:.0f}s", flush=True)
+    listing = W.get(f"{WORKER}/list", timeout=120).text.split("\n")
+    used = sum(int(line.split("\t")[1]) for line in listing if "\t" in line)
+    print(f"{stamp}: {len(rows)} listings, {len(exps)} expansions, {msg}, {time.time() - t0:.0f}s, "
+          f"R2 {used / 1e9:.2f} GB", flush=True)
+    if used > ALERT_BYTES:  # a failed run = an email from GitHub to Fred
+        sys.exit(f"R2 at {used / 1e9:.2f} GB, free tier is 10 GB: clean up or pay")
 
 
 if __name__ == "__main__":
