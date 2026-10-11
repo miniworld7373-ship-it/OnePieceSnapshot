@@ -3,6 +3,7 @@
   "name": "onepiece-snapshot-trigger",
   "main": "index.js",
   "compatibility_date": "2026-10-01",
+  "workers_dev": false,
   "triggers": { "crons": ["13,43 * * * *"] },
   "observability": { "enabled": true }
 }
