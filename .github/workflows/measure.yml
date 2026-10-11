@@ -1,0 +1,21 @@
+name: measure
+on:
+  workflow_dispatch:
+    inputs:
+      game:
+        default: magic
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests && python measure.py
+        env:
+          GAME: ${{ inputs.game }}
+          CARDTRADER_TOKEN: ${{ secrets.CARDTRADER_TOKEN }}
+          UPLOAD_KEY: ${{ secrets.UPLOAD_KEY }}
+          WORKER_URL: https://onepiece-snapshot-trigger.miniworld7373-daf.workers.dev
